@@ -7,6 +7,7 @@
 #import <React/RCTLog.h>
 #import <React/RCTConvert.h>
 #import "RNAppAuthAuthorizationFlowManager.h"
+#import "OIDExternalUserAgentIOSCustomBrowser+MSEdge.h"
 
 @interface RNAppAuth()<RNAppAuthAuthorizationFlowManagerDelegate> {
     id<OIDExternalUserAgentSession> _currentSession;
@@ -680,7 +681,6 @@ RCT_REMAP_METHOD(logout,
 
 - (id<OIDExternalUserAgent>)getCustomBrowser: (NSString *) browserType {
     typedef id<OIDExternalUserAgent> (^BrowserBlock)(void);
-    
     NSDictionary *browsers = @{
         @"safari":
             ^{
@@ -703,7 +703,11 @@ RCT_REMAP_METHOD(logout,
                 return [OIDExternalUserAgentIOSCustomBrowser CustomBrowserEdge];
             }
     };
+    
+    if (browsers[browserType] == nil) browserType = @"safari";
+    
     BrowserBlock browser = browsers[browserType];
+    
     return browser();
 }
 
