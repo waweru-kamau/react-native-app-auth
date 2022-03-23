@@ -316,7 +316,7 @@ RCT_REMAP_METHOD(logout,
                            usePKCE: (BOOL *) usePKCE
               additionalParameters: (NSDictionary *_Nullable) additionalParameters
               skipCodeExchange: (BOOL) skipCodeExchange
-              iosCustomBrowser: (NSString *) iosCustomBrowser
+                  iosCustomBrowser: (NSString *) iosCustomBrowser
                            resolve: (RCTPromiseResolveBlock) resolve
                             reject: (RCTPromiseRejectBlock)  reject
 {
@@ -357,31 +357,8 @@ RCT_REMAP_METHOD(logout,
     UIViewController *presentingViewController = appDelegate.window.rootViewController.view.window ? appDelegate.window.rootViewController : appDelegate.window.rootViewController.presentedViewController;
     id<OIDExternalUserAgent> externalUserAgent = iosCustomBrowser != nil ? [self getCustomBrowser: iosCustomBrowser] : nil;
 
-
     if (skipCodeExchange) {
-        OIDAuthorizationCallback callback = ^(OIDAuthorizationResponse *_Nullable authorizationResponse, NSError *_Nullable error) {
-            typeof(self) strongSelf = weakSelf;
-            strongSelf->_currentSession = nil;
-            [UIApplication.sharedApplication endBackgroundTask:taskId];
-            taskId = UIBackgroundTaskInvalid;
-            if (authorizationResponse) {
-                resolve([self formatAuthorizationResponse:authorizationResponse withCodeVerifier:codeVerifier]);
-            } else {
-                reject([self getErrorCode: error defaultCode:@"authentication_failed"],
-                       [self getErrorMessage: error], error);
-            }
-        };
-
-        if(externalUserAgent != nil) {
-            _currentSession = [OIDAuthorizationService presentAuthorizationRequest:request
-                                                                 externalUserAgent:externalUserAgent
-                                                                          callback:callback];
-        } else {
-            _currentSession = [OIDAuthorizationService presentAuthorizationRequest:request
-                                                          presentingViewController:presentingViewController
-                                                                          callback:callback];
-        }
-        _currentSession = [OIDAuthorizationService presentAuthorizationRequest:request
+      _currentSession = [OIDAuthorizationService presentAuthorizationRequest:request
                                    presentingViewController:presentingViewController
                                                     callback:^(OIDAuthorizationResponse *_Nullable authorizationResponse, NSError *_Nullable error) {
                                                        typeof(self) strongSelf = weakSelf;
@@ -395,30 +372,30 @@ RCT_REMAP_METHOD(logout,
                                                                   [self getErrorMessage: error], error);
                                                        }
                                                    }]; // end [OIDAuthState presentAuthorizationRequest:request
-    } else {
-        OIDAuthStateAuthorizationCallback callback = ^(OIDAuthState *_Nullable authState, NSError *_Nullable error) {
-          typeof(self) strongSelf = weakSelf;
-          strongSelf->_currentSession = nil;
-          [UIApplication.sharedApplication endBackgroundTask:taskId];
-          taskId = UIBackgroundTaskInvalid;
-          if (authState) {
-              resolve([self formatResponse:authState.lastTokenResponse
-                  withAuthResponse:authState.lastAuthorizationResponse]);
-          } else {
-              reject([self getErrorCode: error defaultCode:@"authentication_failed"],
-                     [self getErrorMessage: error], error);
-          }
-        };
 
+        OIDAuthorizationCallback callback = ^(OIDAuthorizationResponse *_Nullable authorizationResponse, NSError *_Nullable error) {
+            typeof(self) strongSelf = weakSelf;
+            strongSelf->_currentSession = nil;
+            [UIApplication.sharedApplication endBackgroundTask:rnAppAuthTaskId];
+            rnAppAuthTaskId = UIBackgroundTaskInvalid;
+            if (authorizationResponse) {
+                resolve([self formatAuthorizationResponse:authorizationResponse withCodeVerifier:codeVerifier]);
+            } else {
+                reject([self getErrorCode: error defaultCode:@"authentication_failed"],
+                       [self getErrorMessage: error], error);
+            }
+        };
+        
         if(externalUserAgent != nil) {
-            _currentSession = [OIDAuthState authStateByPresentingAuthorizationRequest:request
-                                                                    externalUserAgent:externalUserAgent
-                                                                             callback:callback];
+            _currentSession = [OIDAuthorizationService presentAuthorizationRequest:request
+                                                                 externalUserAgent:externalUserAgent
+                                                                          callback:callback];
         } else {
-            _currentSession = [OIDAuthState authStateByPresentingAuthorizationRequest:request
-                                                             presentingViewController:presentingViewController
-                                                                             callback:callback];
+            _currentSession = [OIDAuthorizationService presentAuthorizationRequest:request
+                                                          presentingViewController:presentingViewController
+                                                                          callback:callback];
         }
+    } else {
         _currentSession = [OIDAuthState authStateByPresentingAuthorizationRequest:request
                                 presentingViewController:presentingViewController
                                                 callback:^(OIDAuthState *_Nullable authState,
@@ -435,6 +412,31 @@ RCT_REMAP_METHOD(logout,
                                                                [self getErrorMessage: error], error);
                                                     }
                                                 }]; // end [OIDAuthState authStateByPresentingAuthorizationRequest:request
+
+
+        OIDAuthStateAuthorizationCallback callback = ^(OIDAuthState *_Nullable authState, NSError *_Nullable error) {
+          typeof(self) strongSelf = weakSelf;
+          strongSelf->_currentSession = nil;
+          [UIApplication.sharedApplication endBackgroundTask:rnAppAuthTaskId];
+          rnAppAuthTaskId = UIBackgroundTaskInvalid;
+          if (authState) {
+              resolve([self formatResponse:authState.lastTokenResponse
+                  withAuthResponse:authState.lastAuthorizationResponse]);
+          } else {
+              reject([self getErrorCode: error defaultCode:@"authentication_failed"],
+                     [self getErrorMessage: error], error);
+          }
+        };
+        
+        if(externalUserAgent != nil) {
+            _currentSession = [OIDAuthState authStateByPresentingAuthorizationRequest:request
+                                                                    externalUserAgent:externalUserAgent
+                                                                             callback:callback];
+        } else {
+            _currentSession = [OIDAuthState authStateByPresentingAuthorizationRequest:request
+                                                             presentingViewController:presentingViewController
+                                                                             callback:callback];
+        }
     }
 }
 
@@ -678,7 +680,7 @@ RCT_REMAP_METHOD(logout,
 
 - (id<OIDExternalUserAgent>)getCustomBrowser: (NSString *) browserType {
     typedef id<OIDExternalUserAgent> (^BrowserBlock)(void);
-
+    
     NSDictionary *browsers = @{
         @"safari":
             ^{
