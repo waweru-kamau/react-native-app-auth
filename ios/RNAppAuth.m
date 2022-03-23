@@ -697,6 +697,10 @@ RCT_REMAP_METHOD(logout,
         @"firefox":
             ^{
                 return [OIDExternalUserAgentIOSCustomBrowser CustomBrowserFirefox];
+            },
+        @"edge"
+            ^{
+                return [OIDExternalUserAgentIOSCustomBrowser CustomBrowserEdge];
             }
     };
     BrowserBlock browser = browsers[browserType];
