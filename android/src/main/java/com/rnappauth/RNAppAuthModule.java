@@ -25,6 +25,7 @@ import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.ReadableType;
 
 import com.rnappauth.utils.MapUtil;
+import com.rnappauth.utils.MutableBrowserAllowList;
 import com.rnappauth.utils.UnsafeConnectionBuilder;
 import com.rnappauth.utils.RegistrationResponseFactory;
 import com.rnappauth.utils.TokenResponseFactory;
@@ -46,8 +47,9 @@ import net.openid.appauth.RegistrationResponse;
 import net.openid.appauth.ResponseTypeValues;
 import net.openid.appauth.TokenResponse;
 import net.openid.appauth.TokenRequest;
-import net.openid.appauth.EndSessionRequest;
-import net.openid.appauth.EndSessionResponse;
+import net.openid.appauth.browser.AnyBrowserMatcher;
+import net.openid.appauth.browser.BrowserMatcher;
+import net.openid.appauth.browser.VersionedBrowserMatcher;
 import net.openid.appauth.connectivity.ConnectionBuilder;
 import net.openid.appauth.connectivity.DefaultConnectionBuilder;
 
@@ -87,23 +89,23 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
 
     @ReactMethod
     public void prefetchConfiguration(
-            final Boolean warmAndPrefetchChrome,
-            final String issuer,
-            final String redirectUrl,
-            final String clientId,
-            final ReadableArray scopes,
-            final ReadableMap serviceConfiguration,
-            final boolean dangerouslyAllowInsecureHttpRequests,
-            final ReadableMap headers,
-            final Double connectionTimeoutMillis,
-            final Promise promise
+        final Boolean warmAndPrefetchChrome,
+        final String issuer,
+        final String redirectUrl,
+        final String clientId,
+        final ReadableArray scopes,
+        final ReadableMap serviceConfiguration,
+        final boolean dangerouslyAllowInsecureHttpRequests,
+        final ReadableMap headers,
+        final Double connectionTimeoutMillis,
+        final Promise promise
     ) {
         if (warmAndPrefetchChrome) {
             warmChromeCustomTab(reactContext, issuer);
         }
 
         this.parseHeaderMap(headers);
-        final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.authorizationRequestHeaders, connectionTimeoutMillis);
+        final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.authorizationRequestHeaders);
         final CountDownLatch fetchConfigurationLatch = new CountDownLatch(1);
 
         if(!isPrefetched) {
@@ -149,18 +151,18 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
 
     @ReactMethod
     public void register(
-            String issuer,
-            final ReadableArray redirectUris,
-            final ReadableArray responseTypes,
-            final ReadableArray grantTypes,
-            final String subjectType,
-            final String tokenEndpointAuthMethod,
-            final ReadableMap additionalParameters,
-            final ReadableMap serviceConfiguration,
-            final Double connectionTimeoutMillis,
-            final boolean dangerouslyAllowInsecureHttpRequests,
-            final ReadableMap headers,
-            final Promise promise
+        String issuer,
+        final ReadableArray redirectUris,
+        final ReadableArray responseTypes,
+        final ReadableArray grantTypes,
+        final String subjectType,
+        final String tokenEndpointAuthMethod,
+        final ReadableMap additionalParameters,
+        final ReadableMap serviceConfiguration,
+        final Double connectionTimeoutMillis,
+        final boolean dangerouslyAllowInsecureHttpRequests,
+        final ReadableMap headers,
+        final Promise promise
     ) {
         this.parseHeaderMap(headers);
         final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.registrationRequestHeaders, connectionTimeoutMillis);
@@ -233,11 +235,12 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
             final String clientAuthMethod,
             final boolean dangerouslyAllowInsecureHttpRequests,
             final ReadableMap headers,
+            final ReadableArray androidAllowCustomBrowsers,
             final Promise promise
     ) {
         this.parseHeaderMap(headers);
         final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.authorizationRequestHeaders, connectionTimeoutMillis);
-        final AppAuthConfiguration appAuthConfiguration = this.createAppAuthConfiguration(builder, dangerouslyAllowInsecureHttpRequests);
+        final AppAuthConfiguration appAuthConfiguration = this.createAppAuthConfiguration(builder, dangerouslyAllowInsecureHttpRequests, androidAllowCustomBrowsers);
         final HashMap<String, String> additionalParametersMap = MapUtil.readableMapToHashMap(additionalParameters);
 
         // store args in private fields for later use in onActivityResult handler
@@ -876,10 +879,12 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
      */
     private AppAuthConfiguration createAppAuthConfiguration(
             ConnectionBuilder connectionBuilder,
-            Boolean skipIssuerHttpsCheck
+            Boolean skipIssuerHttpsCheck,
+            ReadableArray androidAllowCustomBrowsers
     ) {
         return new AppAuthConfiguration
                 .Builder()
+                .setBrowserMatcher(getBrowserAllowList(androidAllowCustomBrowsers))
                 .setConnectionBuilder(connectionBuilder)
                 .setSkipIssuerHttpsCheck(skipIssuerHttpsCheck)
                 .build();
@@ -997,7 +1002,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
     }
 
     private void handleAuthorizationException(final String fallbackErrorCode, final AuthorizationException ex, final Promise promise) {
-        if (ex.getLocalizedMessage() == null) {
+         if (ex.getLocalizedMessage() == null) {
             promise.reject(fallbackErrorCode, ex.error, ex);
         } else {
             promise.reject(ex.error != null ? ex.error: fallbackErrorCode, ex.getLocalizedMessage(), ex);
@@ -1008,6 +1013,50 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
         if (issuer != null) {
             mServiceConfigurations.put(issuer, serviceConfiguration);
         }
+    }
+
+    private BrowserMatcher getBrowserAllowList(ReadableArray androidAllowCustomBrowsers) {
+        if(androidAllowCustomBrowsers == null || androidAllowCustomBrowsers.size() == 0) {
+            return AnyBrowserMatcher.INSTANCE;
+        }
+
+        MutableBrowserAllowList browserMatchers = new MutableBrowserAllowList();
+
+        for(int i = 0; i < androidAllowCustomBrowsers.size(); i++) {
+            String browser = androidAllowCustomBrowsers.getString(i);
+
+            if(browser == null) {
+                continue;
+            }
+
+            switch (browser) {
+                case "chrome": {
+                    browserMatchers.add(VersionedBrowserMatcher.CHROME_BROWSER);
+                    break;
+                }
+                case "chromeCustomTab": {
+                    browserMatchers.add(VersionedBrowserMatcher.CHROME_CUSTOM_TAB);
+                    break;
+                }
+                case "firefox": {
+                    browserMatchers.add(VersionedBrowserMatcher.FIREFOX_BROWSER);
+                    break;
+                }
+                case "firefoxCustomTab": {
+                    browserMatchers.add(VersionedBrowserMatcher.FIREFOX_CUSTOM_TAB);
+                    break;
+                }
+                case "samsung": {
+                    browserMatchers.add(VersionedBrowserMatcher.SAMSUNG_BROWSER);
+                    break;
+                }
+                case "samsungCustomTab": {
+                    browserMatchers.add(VersionedBrowserMatcher.SAMSUNG_CUSTOM_TAB);
+                    break;
+                }
+            }
+        }
+        return browserMatchers;
     }
 
     @Override
