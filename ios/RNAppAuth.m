@@ -698,7 +698,7 @@ RCT_REMAP_METHOD(logout,
             ^{
                 return [OIDExternalUserAgentIOSCustomBrowser CustomBrowserFirefox];
             },
-        @"edge"
+        @"edge":
             ^{
                 return [OIDExternalUserAgentIOSCustomBrowser CustomBrowserEdge];
             }
