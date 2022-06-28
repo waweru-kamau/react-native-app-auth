@@ -29,7 +29,6 @@ import com.rnappauth.utils.MutableBrowserAllowList;
 import com.rnappauth.utils.UnsafeConnectionBuilder;
 import com.rnappauth.utils.RegistrationResponseFactory;
 import com.rnappauth.utils.TokenResponseFactory;
-import com.rnappauth.utils.EndSessionResponseFactory;
 import com.rnappauth.utils.CustomConnectionBuilder;
 
 import net.openid.appauth.AppAuthConfiguration;
@@ -97,7 +96,6 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
         final ReadableMap serviceConfiguration,
         final boolean dangerouslyAllowInsecureHttpRequests,
         final ReadableMap headers,
-        final Double connectionTimeoutMillis,
         final Promise promise
     ) {
         if (warmAndPrefetchChrome) {
@@ -159,14 +157,13 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
         final String tokenEndpointAuthMethod,
         final ReadableMap additionalParameters,
         final ReadableMap serviceConfiguration,
-        final Double connectionTimeoutMillis,
         final boolean dangerouslyAllowInsecureHttpRequests,
         final ReadableMap headers,
         final Promise promise
     ) {
         this.parseHeaderMap(headers);
-        final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.registrationRequestHeaders, connectionTimeoutMillis);
-        final AppAuthConfiguration appAuthConfiguration = this.createAppAuthConfiguration(builder, dangerouslyAllowInsecureHttpRequests);
+        final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.registrationRequestHeaders);
+        final AppAuthConfiguration appAuthConfiguration = this.createAppAuthConfiguration(builder, dangerouslyAllowInsecureHttpRequests, null);
         final HashMap<String, String> additionalParametersMap = MapUtil.readableMapToHashMap(additionalParameters);
 
         // when serviceConfiguration is provided, we don't need to hit up the OpenID well-known id endpoint
@@ -229,7 +226,6 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
             final ReadableMap additionalParameters,
             final ReadableMap serviceConfiguration,
             final Boolean skipCodeExchange,
-            final Double connectionTimeoutMillis,
             final Boolean useNonce,
             final Boolean usePKCE,
             final String clientAuthMethod,
@@ -239,7 +235,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
             final Promise promise
     ) {
         this.parseHeaderMap(headers);
-        final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.authorizationRequestHeaders, connectionTimeoutMillis);
+        final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.authorizationRequestHeaders);
         final AppAuthConfiguration appAuthConfiguration = this.createAppAuthConfiguration(builder, dangerouslyAllowInsecureHttpRequests, androidAllowCustomBrowsers);
         final HashMap<String, String> additionalParametersMap = MapUtil.readableMapToHashMap(additionalParameters);
 
@@ -324,15 +320,14 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
             final ReadableArray scopes,
             final ReadableMap additionalParameters,
             final ReadableMap serviceConfiguration,
-            final Double connectionTimeoutMillis,
             final String clientAuthMethod,
             final boolean dangerouslyAllowInsecureHttpRequests,
             final ReadableMap headers,
             final Promise promise
     ) {
         this.parseHeaderMap(headers);
-        final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.tokenRequestHeaders, connectionTimeoutMillis);
-        final AppAuthConfiguration appAuthConfiguration = createAppAuthConfiguration(builder, dangerouslyAllowInsecureHttpRequests);
+        final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, this.tokenRequestHeaders);
+        final AppAuthConfiguration appAuthConfiguration = createAppAuthConfiguration(builder, dangerouslyAllowInsecureHttpRequests, null);
         final HashMap<String, String> additionalParametersMap = MapUtil.readableMapToHashMap(additionalParameters);
 
         if (clientSecret != null) {
@@ -404,72 +399,6 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
 
     }
 
-    @ReactMethod
-    public void logout(
-            String issuer,
-            final String idTokenHint,
-            final String postLogoutRedirectUri,
-            final ReadableMap serviceConfiguration,
-            final ReadableMap additionalParameters,
-            final boolean dangerouslyAllowInsecureHttpRequests,
-            final Promise promise
-    ) {
-        final ConnectionBuilder builder = createConnectionBuilder(dangerouslyAllowInsecureHttpRequests, null);
-        final AppAuthConfiguration appAuthConfiguration = this.createAppAuthConfiguration(builder, dangerouslyAllowInsecureHttpRequests);
-        final HashMap<String, String> additionalParametersMap = MapUtil.readableMapToHashMap(additionalParameters);
-
-        this.promise = promise;
-
-        if (serviceConfiguration != null || hasServiceConfiguration(issuer)) {
-            try {
-                final AuthorizationServiceConfiguration serviceConfig = hasServiceConfiguration(issuer) ? getServiceConfiguration(issuer) : createAuthorizationServiceConfiguration(serviceConfiguration);
-                endSessionWithConfiguration(
-                        serviceConfig,
-                        appAuthConfiguration,
-                        idTokenHint,
-                        postLogoutRedirectUri,
-                        additionalParametersMap
-                );
-            } catch (ActivityNotFoundException e) {
-                promise.reject("browser_not_found", e.getMessage());
-            } catch (Exception e) {
-                promise.reject("end_session_failed", e.getMessage());
-            }
-        } else {
-            final Uri issuerUri = Uri.parse(issuer);
-            AuthorizationServiceConfiguration.fetchFromUrl(
-                    buildConfigurationUriFromIssuer(issuerUri),
-                    new AuthorizationServiceConfiguration.RetrieveConfigurationCallback() {
-                        public void onFetchConfigurationCompleted(
-                                @Nullable AuthorizationServiceConfiguration fetchedConfiguration,
-                                @Nullable AuthorizationException ex) {
-                            if (ex != null) {
-                                promise.reject("service_configuration_fetch_error", ex.getLocalizedMessage(), ex);
-                                return;
-                            }
-
-                            setServiceConfiguration(issuer, fetchedConfiguration);
-
-                            try {
-                                endSessionWithConfiguration(
-                                        fetchedConfiguration,
-                                        appAuthConfiguration,
-                                        idTokenHint,
-                                        postLogoutRedirectUri,
-                                        additionalParametersMap
-                                );
-                            } catch (ActivityNotFoundException e) {
-                                promise.reject("browser_not_found", e.getMessage());
-                            } catch (Exception e) {
-                                promise.reject("end_session_failed", e.getMessage());
-                            }
-                        }
-                    },
-                    builder
-            );
-        }
-    }
-
     /*
      * Called when the OAuth browser activity completes
      */
@@ -510,7 +439,8 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
             final Promise authorizePromise = this.promise;
             final AppAuthConfiguration configuration = createAppAuthConfiguration(
                     createConnectionBuilder(this.dangerouslyAllowInsecureHttpRequests, this.tokenRequestHeaders),
-                    this.dangerouslyAllowInsecureHttpRequests
+                    this.dangerouslyAllowInsecureHttpRequests,
+                    null
             );
 
             AuthorizationService authService = new AuthorizationService(this.reactContext, configuration);
@@ -544,41 +474,21 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
             }
 
         }
-
-        if (requestCode == 53) {
-            if (data == null) {
-                if (promise != null) {
-                    promise.reject("end_session_failed", "Data intent is null" );
-                }
-                return;
-            }
-            EndSessionResponse response = EndSessionResponse.fromIntent(data);
-            AuthorizationException ex = AuthorizationException.fromIntent(data);
-            if (ex != null) {
-                if (promise != null) {
-                    handleAuthorizationException("end_session_failed", ex, promise);
-                }
-                return;
-            }
-            final Promise endSessionPromise = this.promise;
-            WritableMap map = EndSessionResponseFactory.endSessionResponseToMap(response);
-            endSessionPromise.resolve(map);
-        }
     }
 
     /*
      * Perform dynamic client registration with the provided configuration
      */
     private void registerWithConfiguration(
-            final AuthorizationServiceConfiguration serviceConfiguration,
-            final AppAuthConfiguration appAuthConfiguration,
-            final ReadableArray redirectUris,
-            final ReadableArray responseTypes,
-            final ReadableArray grantTypes,
-            final String subjectType,
-            final String tokenEndpointAuthMethod,
-            final Map<String, String> additionalParametersMap,
-            final Promise promise
+        final AuthorizationServiceConfiguration serviceConfiguration,
+        final AppAuthConfiguration appAuthConfiguration,
+        final ReadableArray redirectUris,
+        final ReadableArray responseTypes,
+        final ReadableArray grantTypes,
+        final String subjectType,
+        final String tokenEndpointAuthMethod,
+        final Map<String, String> additionalParametersMap,
+        final Promise promise
     ) {
         final Context context = this.reactContext;
 
@@ -586,10 +496,10 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
 
         RegistrationRequest.Builder registrationRequestBuilder =
                 new RegistrationRequest.Builder(
-                        serviceConfiguration,
-                        arrayToUriList(redirectUris)
+                    serviceConfiguration,
+                    arrayToUriList(redirectUris)
                 )
-                        .setAdditionalParameters(additionalParametersMap);
+                    .setAdditionalParameters(additionalParametersMap);
 
         if (responseTypes != null) {
             registrationRequestBuilder.setResponseTypeValues(arrayToList(responseTypes));
@@ -773,47 +683,6 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
         }
     }
 
-    /*
-     * End user session with provided configuration
-     */
-    private void endSessionWithConfiguration(
-            final AuthorizationServiceConfiguration serviceConfiguration,
-            final AppAuthConfiguration appAuthConfiguration,
-            final String idTokenHint,
-            final String postLogoutRedirectUri,
-            final Map<String, String> additionalParametersMap
-    ) {
-        final Context context = this.reactContext;
-        final Activity currentActivity = getCurrentActivity();
-
-        EndSessionRequest.Builder endSessionRequestBuilder =
-                new EndSessionRequest.Builder(
-                        serviceConfiguration,
-                        idTokenHint,
-                        Uri.parse(postLogoutRedirectUri)
-                );
-
-        if (additionalParametersMap != null) {
-            if (additionalParametersMap.containsKey("state")) {
-                endSessionRequestBuilder.setState(additionalParametersMap.get("state"));
-            }
-        }
-
-        EndSessionRequest endSessionRequest = endSessionRequestBuilder.build();
-
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            AuthorizationService authService = new AuthorizationService(context, appAuthConfiguration);
-            Intent endSessionIntent = authService.getEndSessionRequestIntent(endSessionRequest);
-
-            currentActivity.startActivityForResult(endSessionIntent, 53);
-        } else {
-            AuthorizationService authService = new AuthorizationService(currentActivity, appAuthConfiguration);
-            PendingIntent pendingIntent = currentActivity.createPendingResult(53, new Intent(), 0);
-
-            authService.performEndSessionRequest(endSessionRequest, pendingIntent);
-        }
-    }
-
     private void parseHeaderMap (ReadableMap headerMap) {
         if (headerMap == null) {
             return;
@@ -893,7 +762,7 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
     /*
      *  Create appropriate connection builder based on provided settings
      */
-    private ConnectionBuilder createConnectionBuilder(boolean allowInsecureConnections, Map<String, String> headers, Double connectionTimeoutMillis) {
+    private ConnectionBuilder createConnectionBuilder(boolean allowInsecureConnections, Map<String, String> headers) {
         ConnectionBuilder proxiedBuilder;
 
         if (allowInsecureConnections) {
@@ -903,27 +772,6 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
         }
 
         CustomConnectionBuilder customConnection = new CustomConnectionBuilder(proxiedBuilder);
-        
-        if (headers != null) {
-            customConnection.setHeaders(headers);
-        }
-
-        customConnection.setConnectionTimeout(connectionTimeoutMillis.intValue());
-
-        return customConnection;
-    }
-
-    private ConnectionBuilder createConnectionBuilder(boolean allowInsecureConnections, Map<String, String> headers) {
-        ConnectionBuilder proxiedBuilder;
-
-        if (allowInsecureConnections) {
-            proxiedBuilder = UnsafeConnectionBuilder.INSTANCE;
-        } else {
-            proxiedBuilder = DefaultConnectionBuilder.INSTANCE;
-        }
-
-        CustomConnectionBuilder customConnection = new CustomConnectionBuilder(proxiedBuilder);
-        
         if (headers != null) {
             customConnection.setHeaders(headers);
         }
@@ -953,19 +801,14 @@ public class RNAppAuthModule extends ReactContextBaseJavaModule implements Activ
         Uri authorizationEndpoint = Uri.parse(serviceConfiguration.getString("authorizationEndpoint"));
         Uri tokenEndpoint = Uri.parse(serviceConfiguration.getString("tokenEndpoint"));
         Uri registrationEndpoint = null;
-        Uri endSessionEndpoint = null;
         if (serviceConfiguration.hasKey("registrationEndpoint")) {
             registrationEndpoint = Uri.parse(serviceConfiguration.getString("registrationEndpoint"));
-        }
-        if (serviceConfiguration.hasKey("endSessionEndpoint")) {
-            endSessionEndpoint = Uri.parse(serviceConfiguration.getString("endSessionEndpoint"));
         }
 
         return new AuthorizationServiceConfiguration(
                 authorizationEndpoint,
                 tokenEndpoint,
-                registrationEndpoint,
-                endSessionEndpoint
+                registrationEndpoint
         );
     }
 
