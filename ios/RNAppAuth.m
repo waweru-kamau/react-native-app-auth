@@ -397,24 +397,6 @@ RCT_REMAP_METHOD(logout,
                                                                           callback:callback];
         }
     } else {
-        _currentSession = [OIDAuthState authStateByPresentingAuthorizationRequest:request
-                                presentingViewController:presentingViewController
-                                                callback:^(OIDAuthState *_Nullable authState,
-                                                            NSError *_Nullable error) {
-                                                    typeof(self) strongSelf = weakSelf;
-                                                    strongSelf->_currentSession = nil;
-                                                    [UIApplication.sharedApplication endBackgroundTask:rnAppAuthTaskId];
-                                                    rnAppAuthTaskId = UIBackgroundTaskInvalid;
-                                                    if (authState) {
-                                                        resolve([self formatResponse:authState.lastTokenResponse
-                                                            withAuthResponse:authState.lastAuthorizationResponse]);
-                                                    } else {
-                                                        reject([self getErrorCode: error defaultCode:@"authentication_failed"],
-                                                               [self getErrorMessage: error], error);
-                                                    }
-                                                }]; // end [OIDAuthState authStateByPresentingAuthorizationRequest:request
-
-
         OIDAuthStateAuthorizationCallback callback = ^(OIDAuthState *_Nullable authState, NSError *_Nullable error) {
           typeof(self) strongSelf = weakSelf;
           strongSelf->_currentSession = nil;
